@@ -1,106 +1,373 @@
 <!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Circular OS Prototype</title>
-<style>
-:root{--bg:#F4F8F6;--ink:#0E2A25;--mut:#4A6660;--card:#fff;--line:#D3E0DB;--go:#1E9E5A;--fix:#C98A00;--out:#C8402F;--acc:#0E2A25;--onacc:#F4F8F6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
-@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0E2A25;--ink:#E6F0EC;--mut:#9DB8AF;--card:#153832;--line:#2A5249;--go:#4CC98A;--fix:#F2B33D;--out:#EE7A69;--acc:#4CC98A;--onacc:#0E2A25}}
-:root[data-theme="dark"]{--bg:#0E2A25;--ink:#E6F0EC;--mut:#9DB8AF;--card:#153832;--line:#2A5249;--go:#4CC98A;--fix:#F2B33D;--out:#EE7A69;--acc:#4CC98A;--onacc:#0E2A25}
-html{scroll-padding-top:env(safe-area-inset-top,0px)}*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:20px 16px 48px}
-h1{font-size:1.6rem;margin:0}h2{font-size:1.1rem;margin:0 0 10px}
-.sub{color:var(--mut);margin:2px 0 16px}
-nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
-nav button,.btn{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 16px;border-radius:999px;cursor:pointer}
-nav button.on,.btn.pri{background:var(--acc);color:var(--onacc);border-color:var(--acc)}
-button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid var(--fix);outline-offset:2px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
-.k{font-size:2rem;font-weight:800;line-height:1.1}.l{color:var(--mut);font-size:.9rem}
-.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.8rem;font-weight:700;color:#fff}
-.Transfer{background:var(--go)}.Repair{background:var(--fix);color:#000}.Recycle{background:var(--out)}.Keep,.Recycled{background:var(--mut)}
-.wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}
-td,th{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);font-size:.9rem}th{color:var(--mut)}
-.form{display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin-bottom:16px}
-label{display:grid;gap:4px;font-size:.85rem;color:var(--mut)}
-select,input{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
-.big{font-size:1.5rem;font-weight:800;margin:6px 0}
-ul.log{margin:0;padding-left:18px;color:var(--mut)}ul.log li{margin:4px 0}
-.mini{padding:4px 10px;font-size:.8rem}
-</style></head><body><main>
-<h1>Circular OS</h1>
-<p class="sub">Prototype: reuse before you buy. Simulated campus data, resets on refresh.</p>
-<nav id="tabs"></nav><div id="view"></div>
-</main>
-<script>
-const PRICE={Monitor:12000,Laptop:55000,Printer:18000,Projector:40000,Keyboard:1500};
-const DEPTS=['Lab A','Lab B','Lab C','CS Dept','Physics Dept','Storage'];
-let seed=11;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
-const ri=(a,b)=>Math.round(a+rnd()*(b-a));
-let assets=[],log=[],plan=null,tab='Dashboard',filter='All';
-const stats={prevented:0,saved:0,certified:0};
-let n=1000;
-Object.keys(PRICE).forEach(t=>{const c=t=='Keyboard'?10:t=='Monitor'?20:12;
- for(let i=0;i<c;i++){const r=rnd(),st=r<.4?'in_use':r<.7?'idle':r<.85?'repairable':'broken';
-  const cond=st=='in_use'?ri(60,95):st=='idle'?ri(30,90):st=='repairable'?ri(40,60):ri(10,35);
-  assets.push({id:t.slice(0,3).toUpperCase()+'-'+(n++),type:t,dept:DEPTS[ri(0,5)],status:st,cond,
-   util:st=='in_use'?ri(50,95):ri(2,20),replace:PRICE[t],repair:Math.round(PRICE[t]*(cond>40?.05+rnd()*.3:.4+rnd()*.5)/100)*100,age:ri(1,9)});}});
-const inr=v=>'₹'+v.toLocaleString('en-IN');
-function verdict(a){if(a.status=='recycled')return'Recycled';if(a.status=='in_use')return'Keep';
- if(a.status=='idle'&&a.cond>=50)return'Transfer';return a.repair<.5*a.replace?'Repair':'Recycle';}
-const chip=v=>`<span class="chip ${v}">${v}</span>`;
-const add=m=>log.unshift(new Date().toLocaleTimeString()+'  '+m);
-function makePlan(type,qty,dept){
- const pool=assets.filter(a=>a.type==type&&a.dept!=dept);
- const tr=pool.filter(a=>verdict(a)=='Transfer').sort((x,y)=>y.cond-x.cond).slice(0,qty);
- const rp=pool.filter(a=>verdict(a)=='Repair').sort((x,y)=>x.repair-y.repair).slice(0,qty-tr.length);
- const buy=qty-tr.length-rp.length;
- const saved=tr.length*PRICE[type]+rp.reduce((s,a)=>s+a.replace-a.repair,0)-buy*0;
- return{type,qty,dept,tr,rp,buy,saved};}
-function check(){const f=document.getElementById('f');plan=makePlan(f.t.value,+f.q.value||1,f.d.value);render();}
-function approve(){const p=plan;
- p.tr.forEach(a=>{a.dept=p.dept;a.status='in_use';a.util=70;});
- p.rp.forEach(a=>{a.dept=p.dept;a.status='in_use';a.cond=75;a.util=70;});
- stats.prevented+=p.tr.length+p.rp.length;stats.saved+=p.saved;
- add(`${p.dept}: ${p.tr.length} ${p.type}(s) transferred, ${p.rp.length} repaired, ${p.buy} to purchase. Saved ${inr(p.saved)}`);
- plan=null;tab='Dashboard';render();}
-function recycle(id){const a=assets.find(x=>x.id==id);a.status='recycled';stats.certified++;
- add(`${a.id} handed to certified e-recycler. Certificate CR-${2600+stats.certified}`);render();}
-const btnR=a=>verdict(a)=='Recycle'?`<button class="btn mini" onclick="recycle('${a.id}')">Send to recycler</button>`:'';
-function dash(){const cnt=v=>assets.filter(a=>verdict(a)==v).length;
- const rec=assets.filter(a=>verdict(a)=='Recycle').slice(0,5);
- return`<div class="grid">
- <div class="card"><div class="k">${assets.length}</div><div class="l">assets tracked</div></div>
- <div class="card"><div class="k">${stats.prevented}</div><div class="l">assets kept from becoming waste</div></div>
- <div class="card"><div class="k">${inr(stats.saved)}</div><div class="l">procurement avoided</div></div>
- <div class="card"><div class="k">${stats.certified}</div><div class="l">e-waste items certified</div></div></div>
- <h2>Today's opportunities</h2>
- <div class="grid">${['Transfer','Repair','Recycle'].map(v=>`<div class="card">${chip(v)}<div class="k">${cnt(v)}</div><div class="l">${{Transfer:'idle assets that can move to another lab',Repair:'assets cheaper to fix than replace',Recycle:'assets to send through a certified channel'}[v]}</div></div>`).join('')}</div>
- <h2>Ready for e-waste processing</h2><div class="wrap card"><table><tr><th>Asset</th><th>Type</th><th>Location</th><th>Repair vs value</th><th></th></tr>
- ${rec.map(a=>`<tr><td>${a.id}</td><td>${a.type}</td><td>${a.dept}</td><td>${inr(a.repair)} of ${inr(a.replace)}</td><td>${btnR(a)}</td></tr>`).join('')||'<tr><td colspan=5>None right now.</td></tr>'}</table></div>
- <h2 style="margin-top:18px">Activity log</h2><div class="card"><ul class="log">${log.slice(0,8).map(x=>`<li>${x}</li>`).join('')||'<li>No activity yet. Raise a purchase request.</li>'}</ul></div>`;}
-function req(){let out='';
- if(plan){const p=plan;out=`<div class="card"><div class="l">Recommendation for ${p.qty} ${p.type}(s) in ${p.dept}</div>
- <div class="big">${p.buy==p.qty?'No reusable units found. Buy '+p.qty+'.':'Do not buy '+p.qty+'. Buy only '+p.buy+'.'}</div>
- <p>${chip('Transfer')} ${p.tr.length} units &nbsp; ${chip('Repair')} ${p.rp.length} units &nbsp; <b>Purchase</b> ${p.buy} units</p>
- <div class="wrap"><table><tr><th>Asset</th><th>From</th><th>Action</th><th>Condition</th><th>Cost</th></tr>
- ${p.tr.map(a=>`<tr><td>${a.id}</td><td>${a.dept}</td><td>${chip('Transfer')}</td><td>${a.cond}%</td><td>₹0</td></tr>`).join('')}
- ${p.rp.map(a=>`<tr><td>${a.id}</td><td>${a.dept}</td><td>${chip('Repair')}</td><td>${a.cond}%</td><td>${inr(a.repair)}</td></tr>`).join('')}</table></div>
- <p>Estimated procurement avoided: <b>${inr(p.saved)}</b></p>
- <button class="btn pri" onclick="approve()">Approve plan</button></div>`;}
- return`<form class="form" id="f" onsubmit="return false"><label>Item<select name="t">${Object.keys(PRICE).map(t=>`<option ${plan&&plan.type==t?'selected':''}>${t}</option>`).join('')}</select></label>
- <label>Quantity<input name="q" type="number" min="1" max="30" value="${plan?plan.qty:12}"></label>
- <label>Requesting department<select name="d">${DEPTS.slice(0,5).map(d=>`<option ${plan&&plan.dept==d?'selected':''}>${d}</option>`).join('')}</select></label>
- <button class="btn pri" type="button" onclick="check()">Check campus inventory</button></form>${out}`;}
-function list(){const rows=assets.filter(a=>filter=='All'||a.type==filter);
- return`<div class="form"><label>Filter<select onchange="filter=this.value;render()">${['All',...Object.keys(PRICE)].map(t=>`<option ${t==filter?'selected':''}>${t}</option>`).join('')}</select></label></div>
- <div class="wrap card"><table><tr><th>Asset</th><th>Location</th><th>Status</th><th>Condition</th><th>Utilization</th><th>Verdict</th><th></th></tr>
- ${rows.map(a=>`<tr><td>${a.id}</td><td>${a.dept}</td><td>${a.status.replace('_',' ')}</td><td>${a.cond}%</td><td>${a.util}%</td><td>${chip(verdict(a))}</td><td>${btnR(a)}</td></tr>`).join('')}</table></div>`;}
-function render(){document.getElementById('tabs').innerHTML=['Dashboard','Purchase request','Assets'].map(t=>`<button class="${t==tab?'on':''}" onclick="tab='${t}';render()">${t}</button>`).join('');
- document.getElementById('view').innerHTML=tab=='Dashboard'?dash():tab=='Assets'?list():req();}
-render();
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Circular OS Prototype</title>
+  <style>
+    :root {
+      --bg:#F4F8F6; --ink:#0E2A25; --mut:#4A6660; --card:#fff; --line:#D3E0DB;
+      --go:#1E9E5A; --fix:#C98A00; --out:#C8402F; --acc:#0E2A25; --onacc:#F4F8F6;
+      box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px)
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg:#0E2A25; --ink:#E6F0EC; --mut:#9DB8AF; --card:#153832; --line:#2A5249;
+        --go:#4CC98A; --fix:#F2B33D; --out:#EE7A69; --acc:#4CC98A; --onacc:#0E2A25
+      }
+    }
+    :root[data-theme="dark"] {
+      --bg:#0E2A25; --ink:#E6F0EC; --mut:#9DB8AF; --card:#153832; --line:#2A5249;
+      --go:#4CC98A; --fix:#F2B33D; --out:#EE7A69; --acc:#4CC98A; --onacc:#0E2A25
+    }
+    html { scroll-padding-top:env(safe-area-inset-top,0px); }
+    * { box-sizing:border-box; }
+    body {
+      margin:0; background:var(--bg); color:var(--ink);
+      font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    }
+    main { max-width:1000px; margin:0 auto; padding:20px 16px 48px; }
+    h1 { font-size:1.6rem; margin:0; }
+    h2 { font-size:1.1rem; margin:0 0 10px; }
+    .sub { color:var(--mut); margin:2px 0 16px; }
+    nav { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+    nav button, .btn {
+      font:inherit; font-weight:600; border:1px solid var(--line); background:var(--card);
+      color:var(--ink); padding:8px 16px; border-radius:999px; cursor:pointer;
+    }
+    nav button.on, .btn.pri {
+      background:var(--acc); color:var(--onacc); border-color:var(--acc);
+    }
+    button:focus-visible, select:focus-visible, input:focus-visible {
+      outline:3px solid var(--fix); outline-offset:2px;
+    }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; margin-bottom:18px; }
+    .card {
+      background:var(--card); border:1px solid var(--line); border-radius:10px;
+      padding:14px 16px;
+    }
+    .k { font-size:2rem; font-weight:800; line-height:1.1; }
+    .l { color:var(--mut); font-size:.9rem; }
+    .chip {
+      display:inline-block; padding:2px 10px; border-radius:999px; font-size:.8rem; font-weight:700; color:#fff;
+    }
+    .Transfer { background:var(--go); }
+    .Repair { background:var(--fix); color:#000; }
+    .Recycle { background:var(--out); }
+    .Keep, .Recycled { background:var(--mut); }
+    .wrap { overflow-x:auto; }
+    table { border-collapse:collapse; width:100%; min-width:560px; }
+    td, th {
+      text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-size:.9rem;
+    }
+    th { color:var(--mut); }
+    .form { display:flex; flex-wrap:wrap; gap:10px; align-items:end; margin-bottom:16px; }
+    label { display:grid; gap:4px; font-size:.85rem; color:var(--mut); }
+    select, input {
+      font:inherit; padding:8px 10px; border-radius:8px; border:1px solid var(--line);
+      background:var(--card); color:var(--ink);
+    }
+    .big { font-size:1.5rem; font-weight:800; margin:6px 0; }
+    ul.log { margin:0; padding-left:18px; color:var(--mut); }
+    ul.log li { margin:4px 0; }
+    .mini { padding:4px 10px; font-size:.8rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Circular OS</h1>
+    <p class="sub">Prototype: reuse before you buy. Simulated campus data, resets on refresh.</p>
+    <nav id="tabs"></nav>
+    <div id="view"></div>
+  </main>
 
+  <script>
+    const PRICE = { Monitor:12000, Laptop:55000, Printer:18000, Projector:40000, Keyboard:1500 };
+    const DEPTS = ['Lab A', 'Lab B', 'Lab C', 'CS Dept', 'Physics Dept', 'Storage'];
 
-</script></body></html>
+    let seed = 11;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const ri = (a, b) => Math.round(a + rnd() * (b - a));
 
+    let assets = [], log = [], plan = null, tab = 'Dashboard', filter = 'All';
+    const stats = { prevented: 0, saved: 0, certified: 0 };
+    let n = 1000;
+
+    function seedAssets() {
+      assets = [];
+      Object.entries(PRICE).forEach(([type, basePrice]) => {
+        const count = type === 'Keyboard' ? 10 : type === 'Monitor' ? 20 : 12;
+
+        for (let i = 0; i < count; i++) {
+          const r = rnd();
+          const status = r < 0.4 ? 'in_use' : r < 0.7 ? 'idle' : r < 0.85 ? 'repairable' : 'broken';
+          const cond = status === 'in_use'
+            ? ri(60, 95)
+            : status === 'idle'
+              ? ri(30, 90)
+              : status === 'repairable'
+                ? ri(40, 60)
+                : ri(10, 35);
+
+          const repairRatio = cond > 40 ? 0.05 + rnd() * 0.3 : 0.4 + rnd() * 0.5;
+          assets.push({
+            id: type.slice(0, 3).toUpperCase() + '-' + (n++),
+            type,
+            dept: DEPTS[ri(0, DEPTS.length - 1)],
+            status,
+            cond,
+            util: status === 'in_use' ? ri(50, 95) : ri(2, 20),
+            replace: basePrice,
+            repair: Math.round(basePrice * repairRatio / 100) * 100,
+            age: ri(1, 9)
+          });
+        }
+      });
+    }
+
+    seedAssets();
+
+    const inr = v => '₹' + Number(v).toLocaleString('en-IN');
+
+    function verdict(a) {
+      if (a.status === 'recycled') return 'Recycled';
+      if (a.status === 'in_use') return 'Keep';
+      if (a.status === 'idle' && a.cond >= 50) return 'Transfer';
+      return a.repair < 0.5 * a.replace ? 'Repair' : 'Recycle';
+    }
+
+    const chip = v => `<span class="chip ${v}">${v}</span>`;
+    const add = m => log.unshift(new Date().toLocaleTimeString() + '  ' + m);
+
+    function makePlan(type, qty, dept) {
+      const q = Number.isFinite(qty) && qty > 0 ? Math.min(30, Math.max(1, Math.round(qty))) : 1;
+      const pool = assets.filter(a => a.type === type && a.dept !== dept);
+
+      const tr = pool.filter(a => verdict(a) === 'Transfer')
+        .sort((x, y) => y.cond - x.cond)
+        .slice(0, q);
+
+      const rp = pool.filter(a => verdict(a) === 'Repair')
+        .sort((x, y) => x.repair - y.repair)
+        .slice(0, Math.max(0, q - tr.length));
+
+      const buy = Math.max(0, q - tr.length - rp.length);
+      const saved = tr.length * PRICE[type] + rp.reduce((sum, a) => sum + (a.replace - a.repair), 0);
+
+      return { type, qty: q, dept, tr, rp, buy, saved };
+    }
+
+    function check() {
+      const form = document.getElementById('f');
+      if (!form) return;
+
+      const type = form.t.value;
+      const q = Number(form.q.value);
+      const dept = form.d.value;
+
+      plan = makePlan(type, q, dept);
+      render();
+    }
+
+    function approve() {
+      if (!plan) return;
+
+      const p = plan;
+      p.tr.forEach(a => {
+        a.dept = p.dept;
+        a.status = 'in_use';
+        a.util = 70;
+      });
+
+      p.rp.forEach(a => {
+        a.dept = p.dept;
+        a.status = 'in_use';
+        a.cond = 75;
+        a.util = 70;
+      });
+
+      stats.prevented += p.tr.length + p.rp.length;
+      stats.saved += p.saved;
+
+      add(`${p.dept}: ${p.tr.length} ${p.type}(s) transferred, ${p.rp.length} repaired, ${p.buy} to purchase. Saved ${inr(p.saved)}`);
+      plan = null;
+      tab = 'Dashboard';
+      render();
+    }
+
+    function recycle(id) {
+      const a = assets.find(x => x.id === id);
+      if (!a) return;
+
+      a.status = 'recycled';
+      stats.certified += 1;
+      add(`${a.id} handed to certified e-recycler. Certificate CR-${2600 + stats.certified}`);
+      render();
+    }
+
+    const btnR = a =>
+      verdict(a) === 'Recycle'
+        ? `<button class="btn mini" data-action="recycle" data-id="${a.id}">Send to recycler</button>`
+        : '';
+
+    function dash() {
+      const count = v => assets.filter(a => verdict(a) === v).length;
+      const rec = assets.filter(a => verdict(a) === 'Recycle').slice(0, 5);
+
+      return `
+        <div class="grid">
+          <div class="card"><div class="k">${assets.length}</div><div class="l">assets tracked</div></div>
+          <div class="card"><div class="k">${stats.prevented}</div><div class="l">assets kept from becoming waste</div></div>
+          <div class="card"><div class="k">${inr(stats.saved)}</div><div class="l">procurement avoided</div></div>
+          <div class="card"><div class="k">${stats.certified}</div><div class="l">e-waste items certified</div></div>
+        </div>
+
+        <h2>Today's opportunities</h2>
+        <div class="grid">
+          ${['Transfer', 'Repair', 'Recycle'].map(v => `
+            <div class="card">
+              ${chip(v)}
+              <div class="k">${count(v)}</div>
+              <div class="l">${{
+                Transfer: 'idle assets that can move to another lab',
+                Repair: 'assets cheaper to fix than replace',
+                Recycle: 'assets to send through a certified channel'
+              }[v]}</div>
+            </div>
+          `).join('')}
+        </div>
+
+        <h2>Ready for e-waste processing</h2>
+        <div class="wrap card">
+          <table>
+            <tr><th>Asset</th><th>Type</th><th>Location</th><th>Repair vs value</th><th></th></tr>
+            ${rec.map(a => `
+              <tr>
+                <td>${a.id}</td>
+                <td>${a.type}</td>
+                <td>${a.dept}</td>
+                <td>${inr(a.repair)} of ${inr(a.replace)}</td>
+                <td>${btnR(a)}</td>
+              </tr>
+            `).join('') || '<tr><td colspan="5">None right now.</td></tr>'}
+          </table>
+        </div>
+
+        <h2 style="margin-top:18px">Activity log</h2>
+        <div class="card">
+          <ul class="log">
+            ${log.slice(0, 8).map(x => `<li>${x}</li>`).join('') || '<li>No activity yet. Raise a purchase request.</li>'}
+          </ul>
+        </div>
+      `;
+    }
+
+    function req() {
+      let out = '';
+
+      if (plan) {
+        const p = plan;
+        out = `
+          <div class="card">
+            <div class="l">Recommendation for ${p.qty} ${p.type}(s) in ${p.dept}</div>
+            <div class="big">${p.buy === p.qty ? 'No reusable units found. Buy ' + p.qty + '.' : 'Do not buy ' + p.qty + '. Buy only ' + p.buy + '.'}</div>
+            <p>${chip('Transfer')} ${p.tr.length} units &nbsp; ${chip('Repair')} ${p.rp.length} units &nbsp; <b>Purchase</b> ${p.buy} units</p>
+            <div class="wrap">
+              <table>
+                <tr><th>Asset</th><th>From</th><th>Action</th><th>Condition</th><th>Cost</th></tr>
+                ${p.tr.map(a => `
+                  <tr>
+                    <td>${a.id}</td>
+                    <td>${a.dept}</td>
+                    <td>${chip('Transfer')}</td>
+                    <td>${a.cond}%</td>
+                    <td>₹0</td>
+                  </tr>
+                `).join('')}
+                ${p.rp.map(a => `
+                  <tr>
+                    <td>${a.id}</td>
+                    <td>${a.dept}</td>
+                    <td>${chip('Repair')}</td>
+                    <td>${a.cond}%</td>
+                    <td>${inr(a.repair)}</td>
+                  </tr>
+                `).join('')}
+              </table>
+            </div>
+            <p>Estimated procurement avoided: <b>${inr(p.saved)}</b></p>
+            <button class="btn pri" onclick="approve()">Approve plan</button>
+          </div>
+        `;
+      }
+
+      return `
+        <form class="form" id="f" onsubmit="return false">
+          <label>Item
+            <select name="t">
+              ${Object.keys(PRICE).map(t => `<option value="${t}" ${plan && plan.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </label>
+          <label>Quantity
+            <input name="q" type="number" min="1" max="30" value="${plan ? plan.qty : 12}">
+          </label>
+          <label>Requesting department
+            <select name="d">
+              ${DEPTS.slice(0, 5).map(d => `<option value="${d}" ${plan && plan.dept === d ? 'selected' : ''}>${d}</option>`).join('')}
+            </select>
+          </label>
+          <button class="btn pri" type="button" onclick="check()">Check campus inventory</button>
+        </form>
+        ${out}
+      `;
+    }
+
+    function list() {
+      const rows = assets.filter(a => filter === 'All' || a.type === filter);
+
+      return `
+        <div class="form">
+          <label>Filter
+            <select onchange="filter=this.value; render()">
+              ${['All', ...Object.keys(PRICE)].map(t => `<option ${t === filter ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </label>
+        </div>
+        <div class="wrap card">
+          <table>
+            <tr><th>Asset</th><th>Location</th><th>Status</th><th>Condition</th><th>Utilization</th><th>Verdict</th><th></th></tr>
+            ${rows.map(a => `
+              <tr>
+                <td>${a.id}</td>
+                <td>${a.dept}</td>
+                <td>${a.status.replace('_', ' ')}</td>
+                <td>${a.cond}%</td>
+                <td>${a.util}%</td>
+                <td>${chip(verdict(a))}</td>
+                <td>${btnR(a)}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </div>
+      `;
+    }
+
+    function render() {
+      document.getElementById('tabs').innerHTML = ['Dashboard', 'Purchase request', 'Assets']
+        .map(t => `<button class="${t === tab ? 'on' : ''}" onclick="tab='${t}'; render()">${t}</button>`)
+        .join('');
+
+      const currentView = tab === 'Dashboard' ? dash() : tab === 'Assets' ? list() : req();
+      document.getElementById('view').innerHTML = currentView;
+    }
+
+    document.addEventListener('click', event => {
+      const btn = event.target.closest('[data-action="recycle"]');
+      if (!btn) return;
+      recycle(btn.dataset.id);
+    });
+
+    render();
+  </script>
+</body>
+</html>
