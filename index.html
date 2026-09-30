@@ -100,5 +100,7 @@ function list(){const rows=assets.filter(a=>filter=='All'||a.type==filter);
 function render(){document.getElementById('tabs').innerHTML=['Dashboard','Purchase request','Assets'].map(t=>`<button class="${t==tab?'on':''}" onclick="tab='${t}';render()">${t}</button>`).join('');
  document.getElementById('view').innerHTML=tab=='Dashboard'?dash():tab=='Assets'?list():req();}
 render();
+
+
 </script></body></html>
 
